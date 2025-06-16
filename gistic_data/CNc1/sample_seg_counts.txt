@@ -1,0 +1,10 @@
+sample	segment_count	included
+ACH-000082	713	yes
+ACH-000364	541	yes
+ACH-002067	546	yes
+ACH-002834	634	yes
+ACH-002471	588	yes
+ACH-001526	859	yes
+ACH-001715	498	yes
+ACH-002690	392	yes
+ACH-000410	525	yes
