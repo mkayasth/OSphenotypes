@@ -187,26 +187,26 @@ all_candidates <- all_candidates %>%
 # copy number table of just the candidates. Log fold change of 0.75 and p-value less than 0.05 considered.
 copyNumberCandidates <- copyNumber[rownames(copyNumber) %in% all_candidates$gene, ]
 
-##### Making volcano plot for TA vs. ALT.
+# ##### Making volcano plot for TA vs. ALT.
 
 ta_expression <- ta_results[, c("logFC", "P.Value")]
 alt_expression <- alt_results[, c("logFC", "P.Value")]
-
-ta_expression <- ta_expression %>%
-  mutate("Gene Status" = case_when(
-    ta_results$logFC > 0.75 & ta_results$P.Value < 0.05 ~ "High Copy Number in TA phenotype",
-    ta_results$logFC < -0.75 & ta_results$P.Value < 0.05 ~ "Low Copy Number in TA phenotype",
-    TRUE ~"Not Significant"
-  ))
+# 
+# ta_expression <- ta_expression %>%
+#   mutate("Gene Status" = case_when(
+#     ta_results$logFC > 0.75 & ta_results$P.Value < 0.05 ~ "High Copy Number in TA samples.",
+#     ta_results$logFC < -0.75 & ta_results$P.Value < 0.05 ~ "Low Copy Number in TA samples.",
+#     TRUE ~"Not Significant"
+#   ))
 
 # Top 5 Genes in terms of fold change (to label in the volcano plot). Red denotes most copy number in TA and blue denotes least copy number in ALT phenotype.
 ta_top5 <- ta_expression %>%
-  filter(`Gene Status` != "Not Significant") %>%
+  filter(P.Value < 0.05) %>%
   arrange(desc(logFC)) %>%
   slice_head(n = 5)
 
 ta_bottom5 <- ta_expression %>%
-  filter(`Gene Status` != "Not Significant") %>%
+  filter(P.Value < 0.05) %>%
   arrange(logFC) %>%
   slice_head(n = 5)
 
@@ -215,19 +215,59 @@ top_labels <- bind_rows(
   ta_bottom5 %>% rownames_to_column("Gene")
 )
 
-#Volcano plot ~ all samples.
-ggplot(data = ta_expression, aes(x = logFC, y = -log10(P.Value), color = `Gene Status`)) +
-  geom_point() + 
-  scale_color_manual(values = c("High Copy Number in TA phenotype" = "red", "Low Copy Number in TA phenotype" = "blue")) +
-  theme_classic() + geom_text_repel(data = top_labels,
-                                    aes(label = Gene),
-                                    vjust = 0.5, hjust = 0.5, size = 3,
-                                    color = "black", box.padding = 0.5,
-                                    point.padding = 0.5, max.overlaps = Inf
-  )
+# .
+# ggplot(data = ta_expression, aes(x = logFC, y = -log10(P.Value), color = `Gene Status`)) +
+#   geom_point() + 
+#   scale_color_manual(values = c("High Copy Number in TA samples." = "red", "Low Copy Number in TA samples." = "blue")) +
+#   theme_classic() + geom_text_repel(data = top_labels,
+#                                     aes(label = Gene),
+#                                     vjust = 0.2, hjust = 0.2, size = 4.0,
+#                                     color = "black", box.padding = 0.3,
+#                                     point.padding = 0.3, max.overlaps = Inf) +
+#   theme(
+#     legend.position = c(0.85, 0.5),
+#     legend.title = element_text(size = 12),
+#     legend.text = element_text(size = 10),
+#     #legend.box.margin = margin(0, 2, 0, 2),
+#     #legend.spacing = unit(1, "mm"),
+#     axis.title.x = element_text(size = 18),
+#     axis.title.y = element_text(size = 18),
+#     axis.text.x  = element_text(size = 12, face = "bold"),
+#     axis.text.y  = element_text(size = 12, face = "bold")
+#   )
+
+# Volcano plot ~ all samples
+EnhancedVolcano(ta_expression,
+                lab = rownames(ta_expression),
+                x = 'logFC',
+                y = 'P.Value',
+                selectLab = top_labels$Gene,  # highlighting signature genes.
+                xlab = bquote(~Log[2]~ 'fold change'),
+                ylab = bquote(~-Log[10]~ 'P-value'),
+                title = NULL,
+                subtitle = NULL,
+                pCutoff = 0.05,
+                FCcutoff = 0.75,
+                pointSize = 2.0,
+                arrowheads = FALSE,
+                labFace = 'bold',
+                boxedLabels = TRUE,
+                labSize = 3.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                colAlpha = 0.8,
+                ylim = c(0, 7),
+                legendLabels = c('Not Significant','Significant logFC','Significant P-value ','Significant P-value & LogFC'),
+                col = c('grey80', 'grey50', 'grey25', 'purple'),
+                caption = "Cutoffs: P < 0.05, |Log2FC| > 0.75"
+) + theme_classic() + 
+  theme(axis.title = element_text(size = 18),
+        axis.text = element_text(size = 15),
+        legend.text = element_text(size = 12),
+        legend.title = element_blank(),
+        plot.caption = element_text(size = 14))
 
 rm(top_labels)
-
 
 
 ### Next step: t-test & linear test for candidate genes. Since we dont have anything significant if we look at adjusted p-value, looking at other statistics.
@@ -354,6 +394,7 @@ regression_results_sig <- merge(regression_results_sig, all_candidates[, c("gene
 regression_results_sig <- regression_results_sig[regression_results_sig$Gene %in% t_test_results_sig$gene, ,drop = FALSE]
 
 #####################################################################
+
 
 ##### gene expression of these differential copy number.
 expression_matrix <- geneExpression[rownames(geneExpression) %in% regression_results_sig$Gene, ,drop = FALSE] # out of 22, only 9 are present in expression dataset consisting of protein coding genes.
@@ -645,8 +686,18 @@ OS_gene <- c("TP53", "RB1", "MDM2", "MYCN", "DLG2", "PTPRQ", "ZFHX4", "ALK",
              "COPS3", "DLEU1", "KDR")
 
 ### expression and copy number data.
-expression_matrix <- geneExpression[rownames(geneExpression) %in% OS_gene, ,drop = FALSE]
-copy_number_matrix <- copyNumber[rownames(copyNumber) %in% rownames(expression_matrix), ,drop = FALSE]
+expression_matrix <- t(scale(t(geneExpression[rownames(geneExpression) %in% OS_gene, ,drop = FALSE])))
+
+# replacing sampleID with cell line ID.
+colnames(expression_matrix) <- metadata$cell_line_display_name[
+  match(colnames(expression_matrix), metadata$depmap_id)]
+
+copy_number_matrix <- t(scale(t(copyNumber[rownames(copyNumber) %in% rownames(expression_matrix), ,drop = FALSE])))
+# replacing sampleID with cell line ID.
+colnames(copy_number_matrix) <- metadata$cell_line_display_name[
+  match(colnames(copy_number_matrix), metadata$depmap_id)]
+
+
 expression_matrix <- expression_matrix[rownames(expression_matrix) %in% rownames(copy_number_matrix), ,drop = FALSE]
 
 
@@ -679,6 +730,10 @@ geneFusion <- geneFusion %>%
 geneFusion <- as.data.frame(geneFusion)
 rownames(geneFusion) <- geneFusion$Gene
 geneFusion$Gene = NULL
+
+# replacing sampleID with cell line ID.
+colnames(geneFusion) <- metadata$cell_line_display_name[
+  match(colnames(geneFusion), metadata$depmap_id)]
 
 
 
@@ -720,19 +775,16 @@ somaticMutation <- somaticMutation[rownames(expression_matrix), colnames(express
 geneFusion <- geneFusion[rownames(expression_matrix), colnames(expression_matrix)]
 
 
-### Heatmaps.
-expression_matrix <- scale(expression_matrix)
-
-copy_number_matrix <- scale(copy_number_matrix)
-
-sexMetadata <- as.data.frame(metadataModel[, c("ModelID", "Sex"), drop = FALSE])  #subsetting required columns.
-rownames(sexMetadata) <- sexMetadata$ModelID
-sexMetadata$ModelID = NULL
+## for adding Male or Female category.
+sexMetadata <- as.data.frame(metadataModel[, c("StrippedCellLineName", "Sex"), drop = FALSE])  #subsetting required columns.
+rownames(sexMetadata) <- sexMetadata$StrippedCellLineName
+sexMetadata$StrippedCellLineName = NULL
 sexMetadata = t(sexMetadata)
 
-sampleClassification <- as.data.frame(metadataModel[, c("ModelID", "PrimaryOrMetastasis"), drop = FALSE])  #subsetting required columns.
-rownames(sampleClassification) <- sampleClassification$ModelID
-sampleClassification$ModelID = NULL
+## adding categories: primary or metastasis.
+sampleClassification <- as.data.frame(metadataModel[, c("StrippedCellLineName", "PrimaryOrMetastasis"), drop = FALSE])  #subsetting required columns.
+rownames(sampleClassification) <- sampleClassification$StrippedCellLineName
+sampleClassification$StrippedCellLineName = NULL
 sampleClassification = t(sampleClassification)
 rownames(sampleClassification)[rownames(sampleClassification) == "PrimaryOrMetastasis"] <- "Sample Classification" # renaming the rowname.
 
@@ -769,14 +821,15 @@ sampleClassification_colors <- c(
 ht1 <- Heatmap(expression_matrix,
                       name = "Expression",
                       cluster_columns = FALSE,
+                      column_title = "Expression",
                       cluster_rows = FALSE,
                       show_column_names = TRUE,
                       row_names_gp = gpar(fontsize = 8, fontface = "bold"),
                       column_split = metadata$TMMstatus,
-                      column_title_gp = gpar(fontsize = 20),
-                      column_names_gp = gpar(fontsize = 10),
-                      height = unit(10, "cm"),
-                      width = unit(15, "cm"),
+                      column_title_gp = gpar(fontsize = 0),
+                      column_names_gp = gpar(fontsize = 6),
+                      height = unit(6, "cm"),
+                      width = unit(8, "cm"),
                cell_fun = function(j, i, x, y, width, height, fill) {
                  grid.rect(x = x, y = y, width = width, height = height, 
                            gp = gpar(col = "black", fill = NA, lwd = 0.75))
@@ -786,14 +839,15 @@ ht1 <- Heatmap(expression_matrix,
 ht2 <- Heatmap(copy_number_matrix,
                name = "Copy Number",
                cluster_columns = FALSE,
+               column_title = "Copy Number",
                cluster_rows = FALSE,
                show_column_names = TRUE,
                row_names_gp = gpar(fontsize = 8, fontface = "bold"),
                column_split = metadata$TMMstatus,
-               column_title_gp = gpar(fontsize = 20),
-               column_names_gp = gpar(fontsize = 10),
-               height = unit(10, "cm"),
-               width = unit(15, "cm"),
+               column_title_gp = gpar(fontsize = 10),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(8, "cm"),
                cell_fun = function(j, i, x, y, width, height, fill) {
                  grid.rect(x = x, y = y, width = width, height = height, 
                            gp = gpar(col = "black", fill = NA, lwd = 0.75))
@@ -803,14 +857,15 @@ ht2 <- Heatmap(copy_number_matrix,
 ht3 <- Heatmap(geneFusion, name = "Fusion", 
                col = fusion_colors, 
                cluster_rows = FALSE, 
+               column_title = "Fusion",
                show_column_names = TRUE,
                cluster_columns = FALSE,
                row_names_gp = gpar(fontsize = 8, fontface = "bold"),
                column_split = metadata$TMMstatus,
-               column_title_gp = gpar(fontsize = 0),
-               column_names_gp = gpar(fontsize = 10),
-               height = unit(10, "cm"),
-               width = unit(15, "cm"),
+               column_title_gp = gpar(fontsize = 10),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(8, "cm"),
                cell_fun = function(j, i, x, y, width, height, fill) {
                  grid.rect(x = x, y = y, width = width, height = height, 
                            gp = gpar(col = "black", fill = NA, lwd = 0.75))
@@ -823,10 +878,10 @@ ht4 <- Heatmap(somaticMutation, name = "Mutations",
                cluster_columns = FALSE,
                row_names_gp = gpar(fontsize = 8, fontface = "bold"),
                column_split = metadata$TMMstatus,
-               column_title_gp = gpar(fontsize = 0),
-               column_names_gp = gpar(fontsize = 10),
-               height = unit(10, "cm"),
-               width = unit(15, "cm"),
+               column_title_gp = gpar(fontsize = 10),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(8, "cm"),
                cell_fun = function(j, i, x, y, width, height, fill) {
                  grid.rect(x = x, y = y, width = width, height = height, 
                            gp = gpar(col = "black", fill = NA, lwd = 0.75))
@@ -841,9 +896,9 @@ ht5 <- Heatmap(sexMetadata, name = "Sex",
                row_names_gp = gpar(fontsize = 8, fontface = "bold"),
                column_split = metadata$TMMstatus,
                column_title_gp = gpar(fontsize = 0),
-               column_names_gp = gpar(fontsize = 10),
-               height = unit(0.5, "cm"),
-               width = unit(15, "cm"),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(0.2, "cm"),
+               width = unit(8, "cm"),
                cell_fun = function(j, i, x, y, width, height, fill) {
                  grid.rect(x = x, y = y, width = width, height = height, 
                            gp = gpar(col = "black", fill = NA, lwd = 0.75))
@@ -858,9 +913,9 @@ ht6 <- Heatmap(sampleClassification, name = "Sample Classification",
                row_names_gp = gpar(fontsize = 8, fontface = "bold"),
                column_split = metadata$TMMstatus,
                column_title_gp = gpar(fontsize = 0),
-               column_names_gp = gpar(fontsize = 10),
-               height = unit(0.5, "cm"),
-               width = unit(15, "cm"),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(0.2, "cm"),
+               width = unit(8, "cm"),
                cell_fun = function(j, i, x, y, width, height, fill) {
                  grid.rect(x = x, y = y, width = width, height = height, 
                            gp = gpar(col = "black", fill = NA, lwd = 0.75))
@@ -872,8 +927,10 @@ ht6 <- Heatmap(sampleClassification, name = "Sample Classification",
 ht_combined <-  ht1 %v% ht2 %v% ht3 %v% ht4 %v% ht5 %v% ht6
 
 # exporting to pdf.
-pdf("Output/ExpressionCnMutationFusions.pdf", width = 12, height = 20)
-draw(ht_combined, column_title = "Heatmap For Expression, Copy Number, Mutation and Gene Fusions", column_title_gp = gpar(fontsize = 14, fontface = "bold"))
+pdf("Output/ExpressionCnMutationFusions.pdf", width = 8, height = 12)
+draw(ht_combined, heatmap_legend_side = "right",
+     annotation_legend_side = "right",
+     padding = unit(c(0, 0, 0, 0), "mm"))
 dev.off()
 
 # trying different grids here...
@@ -888,7 +945,454 @@ grid.arrange(ht1g, ht2g, ncol = 1,
 dev.off()
 
 
-#######################################################
+
+
+
+
+
+########################################################################################
+
+### Now making heatmaps with ALT & TA genes.
+gene_alts <- c("ATRX", "DAXX", "SLX4", "MUS81", "PML", "RAD51", "ASF1B", "CHEK1", "FANCM", "FANCD2", "BLM", "SMARCA5", "CHD4", "BRCA2", "TOP3A")
+gene_tas <- c("TERT", "DKC1", "GAR1", "MYC")
+
+gene_combined <-c("ATRX", "DAXX", "SLX4", "MUS81", "PML", "RAD51", "ASF1B", "CHEK1", "FANCM", "FANCD2", "BLM", "SMARCA5", "CHD4", "BRCA2", "TOP3A", "TERT", "DKC1", "GAR1", "MYC")
+
+
+### scaling, matching order and finally heatmap.
+expression_matrix <- t(scale(t(geneExpression[rownames(geneExpression) %in% gene_combined, ,drop = FALSE])))
+# replacing sampleID with cell line ID.
+colnames(expression_matrix) <- metadata$cell_line_display_name[
+  match(colnames(expression_matrix), metadata$depmap_id)]
+
+copy_number_matrix <- t(scale(t(copyNumber[rownames(copyNumber) %in% rownames(expression_matrix), ,drop = FALSE])))
+# replacing sampleID with cell line ID.
+colnames(copy_number_matrix) <- metadata$cell_line_display_name[
+  match(colnames(copy_number_matrix), metadata$depmap_id)]
+
+expression_matrix <- expression_matrix[rownames(expression_matrix) %in% rownames(copy_number_matrix), ,drop = FALSE]
+
+gene_combined <- gene_combined[gene_combined %in% rownames(expression_matrix)]
+
+
+### gene fusion data.
+geneFusion <- readRDS("Output/geneFusion.rds") # from geneFusion.R.
+
+# Converting geneFusion to appropriate format.
+geneFusion <- geneFusion %>%
+  mutate(Present = 1) %>%
+  distinct(Gene, SampleID, .keep_all = TRUE) %>%
+  pivot_wider(names_from = SampleID, values_from = Present, values_fill = 0)
+
+geneFusion <- geneFusion %>%
+  dplyr::select(2:last_col())
+
+geneFusion <- geneFusion[geneFusion$Gene %in% rownames(expression_matrix), ,drop = FALSE]
+missing_genes <- setdiff(rownames(expression_matrix), geneFusion$Gene)
+
+# creating a 0-filled dataframe for the missing genes: not doing this gave error.
+zero_rows <- matrix(0, nrow = length(missing_genes), ncol = ncol(geneFusion) - 1) %>%
+  as.data.frame()
+colnames(zero_rows) <- colnames(geneFusion)[-1]  # match sample column names
+zero_rows <- cbind(Gene = missing_genes, zero_rows)
+
+geneFusion <- bind_rows(geneFusion, zero_rows)
+geneFusion <- geneFusion %>%
+  group_by(Gene) %>%
+  summarise(across(everything(), max), .groups = "drop")
+
+geneFusion <- as.data.frame(geneFusion)
+rownames(geneFusion) <- geneFusion$Gene
+geneFusion$Gene = NULL
+
+# replacing sampleID with cell line ID.
+colnames(geneFusion) <- metadata$cell_line_display_name[
+  match(colnames(geneFusion), metadata$depmap_id)]
+
+### mutation data.
+somaticMutation <- readRDS("Output/somaticMutation.rds")
+somaticMutation <- somaticMutation@data
+somaticMutation <- somaticMutation %>%
+  dplyr::select(Hugo_Symbol, Variant_Classification, Tumor_Sample_Barcode)
+
+somaticMutation <- somaticMutation %>%
+  mutate(Variant_Classification = as.character(Variant_Classification)) %>%
+  distinct(Hugo_Symbol, Tumor_Sample_Barcode, .keep_all = TRUE) %>%
+  pivot_wider(names_from = Tumor_Sample_Barcode,
+              values_from = Variant_Classification,
+              values_fill = "None")
+
+somaticMutation <- as.data.frame(somaticMutation)
+rownames(somaticMutation) <- somaticMutation$Hugo_Symbol
+somaticMutation$Hugo_Symbol = NULL
+
+somaticMutation <- somaticMutation[rownames(somaticMutation) %in% rownames(copy_number_matrix), ,drop = FALSE]
+
+# creating a "None"-filled dataframe for the missing genes
+
+missing_genes <- setdiff(rownames(expression_matrix), rownames(somaticMutation))
+zero_rows <- matrix("None", nrow = length(missing_genes), ncol = ncol(somaticMutation)) %>%
+  as.data.frame()
+colnames(zero_rows) <- colnames(somaticMutation)
+rownames(zero_rows) <- missing_genes
+
+zero_rows <- cbind(zero_rows)
+
+somaticMutation <- bind_rows(somaticMutation, zero_rows)
+
+
+### matching the rows and columns before making the heatmap.
+copy_number_matrix <- copy_number_matrix[rownames(expression_matrix), colnames(expression_matrix)]
+somaticMutation <- somaticMutation[rownames(expression_matrix), colnames(expression_matrix)]
+geneFusion <- geneFusion[rownames(expression_matrix), colnames(expression_matrix)]
+
+row_split <- ifelse(gene_combined %in% gene_alts, "ALT", "TA") # for heatmap.
+row_split <- factor(row_split, levels = c("ALT", "TA"))
+names(row_split) <- gene_combined
+
+
+ht1 <- Heatmap(expression_matrix,
+               name = "Expression",
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_columns = FALSE,
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 20),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+ht2 <- Heatmap(copy_number_matrix,
+               name = "Copy Number",
+               row_order = names(row_split),
+              #row_split = row_split,
+               cluster_columns = FALSE,
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 20),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+ht3 <- Heatmap(geneFusion, name = "Fusion", 
+               col = fusion_colors, 
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_rows = FALSE, 
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+ht4 <- Heatmap(somaticMutation, name = "Mutations", 
+               col = mutation_colors, 
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_rows = FALSE, 
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+ht5 <- Heatmap(sexMetadata, name = "Sex",
+               col = sexColors,
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(0.2, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+ht6 <- Heatmap(sampleClassification, name = "Sample Classification",
+               col = sampleClassification_colors,
+               na_col = "gray90",
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(0.2, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+
+
+ht_combined <-  ht1 %v% ht2 %v% ht3 %v% ht4 %v% ht5 %v% ht6
+
+# exporting to pdf.
+pdf("Output/ExpressionCnMutationFusions2.pdf", width = 6, height = 12)
+draw(ht_combined)
+dev.off()
+
+
+####################################################################################
+
+### Now making heatmaps with ALT & TA signature genes.
+#gene_alts <- c("ATRX", "DAXX", "SLX4", "MUS81", "PML", "RAD51", "ASF1B", "CHEK1", "FANCM", "FANCD2", "BLM", "SMARCA5", "CHD4", "BRCA2", "TOP3A")
+#gene_tas <- c("TERT", "DKC1", "GAR1", "MYC")
+
+gene_combined <-c("GASK1B", "SYCP2", "H2BC11", "MAB21L2", "CLSTN3", "ELOVL4", "MAP9", "COL24A1", "PGM2L1", "STK32A", "CRYAB", "ARMH4", "LFNG", "SYTL5", "CCL28",
+                "TERT", "CCDC8", "ALDH1A3", "ERICH1", "TDRP", "SHFL", "DNPH1", "IRX2")
+
+
+### scaling, matching order and finally heatmap.
+expression_matrix <- t(scale(t(geneExpression[rownames(geneExpression) %in% gene_combined, ,drop = FALSE])))
+# replacing sampleID with cell line ID.
+colnames(expression_matrix) <- metadata$cell_line_display_name[
+  match(colnames(expression_matrix), metadata$depmap_id)]
+
+copy_number_matrix <- t(scale(t(copyNumber[rownames(copyNumber) %in% rownames(expression_matrix), ,drop = FALSE])))
+# replacing sampleID with cell line ID.
+colnames(copy_number_matrix) <- metadata$cell_line_display_name[
+  match(colnames(copy_number_matrix), metadata$depmap_id)]
+
+expression_matrix <- expression_matrix[rownames(expression_matrix) %in% rownames(copy_number_matrix), ,drop = FALSE]
+
+gene_combined <- gene_combined[gene_combined %in% rownames(expression_matrix)]
+
+
+### gene fusion data.
+geneFusion <- readRDS("Output/geneFusion.rds") # from geneFusion.R.
+
+# Converting geneFusion to appropriate format.
+geneFusion <- geneFusion %>%
+  mutate(Present = 1) %>%
+  distinct(Gene, SampleID, .keep_all = TRUE) %>%
+  pivot_wider(names_from = SampleID, values_from = Present, values_fill = 0)
+
+geneFusion <- geneFusion %>%
+  dplyr::select(2:last_col())
+
+geneFusion <- geneFusion[geneFusion$Gene %in% rownames(expression_matrix), ,drop = FALSE]
+missing_genes <- setdiff(rownames(expression_matrix), geneFusion$Gene)
+
+# creating a 0-filled dataframe for the missing genes: not doing this gave error.
+zero_rows <- matrix(0, nrow = length(missing_genes), ncol = ncol(geneFusion) - 1) %>%
+  as.data.frame()
+colnames(zero_rows) <- colnames(geneFusion)[-1]  # match sample column names
+zero_rows <- cbind(Gene = missing_genes, zero_rows)
+
+geneFusion <- bind_rows(geneFusion, zero_rows)
+geneFusion <- geneFusion %>%
+  group_by(Gene) %>%
+  summarise(across(everything(), max), .groups = "drop")
+
+geneFusion <- as.data.frame(geneFusion)
+rownames(geneFusion) <- geneFusion$Gene
+geneFusion$Gene = NULL
+
+# replacing sampleID with cell line ID.
+colnames(geneFusion) <- metadata$cell_line_display_name[
+  match(colnames(geneFusion), metadata$depmap_id)]
+
+### mutation data.
+somaticMutation <- readRDS("Output/somaticMutation.rds")
+somaticMutation <- somaticMutation@data
+somaticMutation <- somaticMutation %>%
+  dplyr::select(Hugo_Symbol, Variant_Classification, Tumor_Sample_Barcode)
+
+somaticMutation <- somaticMutation %>%
+  mutate(Variant_Classification = as.character(Variant_Classification)) %>%
+  distinct(Hugo_Symbol, Tumor_Sample_Barcode, .keep_all = TRUE) %>%
+  pivot_wider(names_from = Tumor_Sample_Barcode,
+              values_from = Variant_Classification,
+              values_fill = "None")
+
+somaticMutation <- as.data.frame(somaticMutation)
+rownames(somaticMutation) <- somaticMutation$Hugo_Symbol
+somaticMutation$Hugo_Symbol = NULL
+
+somaticMutation <- somaticMutation[rownames(somaticMutation) %in% rownames(copy_number_matrix), ,drop = FALSE]
+
+# creating a "None"-filled dataframe for the missing genes
+
+missing_genes <- setdiff(rownames(expression_matrix), rownames(somaticMutation))
+zero_rows <- matrix("None", nrow = length(missing_genes), ncol = ncol(somaticMutation)) %>%
+  as.data.frame()
+colnames(zero_rows) <- colnames(somaticMutation)
+rownames(zero_rows) <- missing_genes
+
+zero_rows <- cbind(zero_rows)
+
+somaticMutation <- bind_rows(somaticMutation, zero_rows)
+
+
+### matching the rows and columns before making the heatmap.
+copy_number_matrix <- copy_number_matrix[rownames(expression_matrix), colnames(expression_matrix)]
+somaticMutation <- somaticMutation[rownames(expression_matrix), colnames(expression_matrix)]
+geneFusion <- geneFusion[rownames(expression_matrix), colnames(expression_matrix)]
+
+row_split <- ifelse(gene_combined %in% gene_alts, "ALT", "TA") # for heatmap.
+row_split <- factor(row_split, levels = c("ALT", "TA"))
+names(row_split) <- gene_combined
+
+
+ht1 <- Heatmap(expression_matrix,
+               name = "Expression",
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_columns = FALSE,
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 20),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+ht2 <- Heatmap(copy_number_matrix,
+               name = "Copy Number",
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_columns = FALSE,
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 20),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+ht3 <- Heatmap(geneFusion, name = "Fusion", 
+               col = fusion_colors, 
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_rows = FALSE, 
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+ht4 <- Heatmap(somaticMutation, name = "Mutations", 
+               col = mutation_colors, 
+               row_order = names(row_split),
+               #row_split = row_split,
+               cluster_rows = FALSE, 
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(6, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+ht5 <- Heatmap(sexMetadata, name = "Sex",
+               col = sexColors,
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(0.2, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+ht6 <- Heatmap(sampleClassification, name = "Sample Classification",
+               col = sampleClassification_colors,
+               na_col = "gray90",
+               cluster_rows = FALSE,
+               show_column_names = TRUE,
+               cluster_columns = FALSE,
+               row_names_gp = gpar(fontsize = 8, fontface = "bold"),
+               column_split = metadata$TMMstatus,
+               column_title_gp = gpar(fontsize = 0),
+               column_names_gp = gpar(fontsize = 6),
+               height = unit(0.2, "cm"),
+               width = unit(6, "cm"),
+               cell_fun = function(j, i, x, y, width, height, fill) {
+                 grid.rect(x = x, y = y, width = width, height = height, 
+                           gp = gpar(col = "black", fill = NA, lwd = 0.75))
+               })
+
+
+
+
+ht_combined <-  ht1 %v% ht2 %v% ht3 %v% ht4 %v% ht5 %v% ht6
+
+# exporting to pdf.
+pdf("Output/ExpressionCnMutationFusions3.pdf", width = 6, height = 12)
+draw(ht_combined)
+dev.off()
+
+
+
+#####################################################################################
 
 ### gistic analysis: making gistic files.
 
