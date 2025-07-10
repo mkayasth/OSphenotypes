@@ -1,5 +1,8 @@
 library(tidyverse)
 library(dplyr)
+library(GenomicRanges)
+library(readr)
+# source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
 
 # For certain likely high-ploidy samples, PureCN does not produce predictions without manual curation, so these samples are omitted in absolute copy number dataset (only 10 out of 16 samples present) even though we have WGS/WES data for them. 
 # we will thus work with relative copy number segment data for this (from GATK).
@@ -110,33 +113,170 @@ fga <- fga %>%
 ggplot(fga, aes(x = reorder(sample, -FGA), y = FGA, fill = TMMstatus)) +
   geom_bar(stat = "identity", position = "dodge") +
   theme_classic() +
-  labs(title = "Fraction of genome altered",
+  labs(
        x = "Sample ID",
        y = "Fraction of genome altered") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title = element_text(size = 15),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 13))
+
 
 model <- lm(FGA ~ TMMstatus, data = fga)
 summary_model <- summary(model)
 boxplot(FGA~TMMstatus, data = fga, ylab = "Fraction of genome altered", xlab = "Class")
-
 # Adding R-squared value.
 legend("topright", legend = paste("R² =", round(summary_model$r.squared, 3), 
                                   "\np-value =", round(summary_model$coefficients[2, 4], 4)),
        bty = "n", cex = 0.8)
 
+# violin plot.
+r_text <- paste0("R² = ", round(summary_model$r.squared, 3))
+
+ggplot(fga, aes(x = TMMstatus, y = FGA, color = TMMstatus, fill = TMMstatus)) +
+  geom_violin(size = 0.2, draw_quantiles=c(0.5),alpha=0.5) +
+  geom_point(position = position_jitter(width = .08), size = 3)  +
+  scale_fill_manual(values=c("ALT"="lightblue","TA"="lightpink2")) + 
+  scale_color_manual(values=c("ALT"="blue", "TA"="darkred"))+ 
+  theme_classic() + 
+  labs(x = "Class", y = "Fraction of Genome Altered") +
+  theme(
+    axis.title = element_text(size = 18),
+    axis.text = element_text(size = 15, face = "bold"), legend.position = "none") +
+  stat_compare_means(comparisons = list(c("ALT","TA")), method= "t.test",
+                     method.args = list(alternative ="two.sided"), size = 8, tip.length = 0.03) +  
+  annotate("text", x = 1, y = 0.2,
+           label = r_text, size = 8, fontface = "bold") 
+
+rm(summary_model)
+rm(r_text)
+rm(model)
+
+
+
 ### Fraction of genome altered: higher in ALT.
 
-#### aneuploidy score: assign each chromosome arm (from hg38) gain or loss.
-library(GenomicRanges)
+# ## Aneuploidy Score.
+# # hg38 cytoband arm data
+# cytoband <- read.table("cytoBand.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)
+# colnames(cytoband) <- c("chromosome", "arm_start", "arm_end", "arm", "gieStain")
+# 
+# # Removing "chr" prefix in chromosome.
+# cytoband$chromosome <- gsub("^chr", "", cytoband$chromosome)
+# 
+# # creating genomic ranges.
+# seg_gr <- GRanges(
+#   seqnames = seg$chromosome,
+#   ranges = IRanges(start = seg$start, end = seg$end),
+#   sample = seg$sample,
+#   status = seg$Status
+# )
+# 
+# arm_gr <- GRanges(
+#   seqnames = cytoband$chromosome,
+#   ranges = IRanges(start = cytoband$arm_start, end = cytoband$arm_end),
+#   arm = cytoband$arm
+# )
+# 
+# # overlaps in cytoband and seg.
+# hits <- findOverlaps(seg_gr, arm_gr)
+# 
+# overlaps <- data.frame(
+#   sample = mcols(seg_gr)$sample[queryHits(hits)],
+#   status = mcols(seg_gr)$status[queryHits(hits)],
+#   chrom = as.character(seqnames(arm_gr)[subjectHits(hits)]),
+#   arm = mcols(arm_gr)$arm[subjectHits(hits)],
+#   seg_index = queryHits(hits),
+#   arm_index = subjectHits(hits),
+#   stringsAsFactors = FALSE
+# )
+# 
+# # Adding genomic coordinates for overlap calculations
+# overlaps <- overlaps %>%
+#   mutate(
+#     seg_start = start(seg_gr)[seg_index],
+#     seg_end = end(seg_gr)[seg_index],
+#     arm_start = start(arm_gr)[arm_index],
+#     arm_end = end(arm_gr)[arm_index]
+#   ) %>%
+#   mutate(
+#     overlap_start = pmax(seg_start, arm_start),
+#     overlap_end = pmin(seg_end, arm_end),
+#     overlap_bases = pmax(overlap_end - overlap_start + 1, 0)
+#   ) %>%
+#   filter(overlap_bases > 0)
+# 
+# # assigning arm level alteration: if 50% or more of the arm is altered by gain or loss, it is counted.
+# arm_status <- overlaps %>%
+#   group_by(sample, chrom, arm) %>%
+#   summarise(
+#     arm_length = sum(overlap_bases),
+#     gain_bases = sum(overlap_bases[status == "+"]),
+#     loss_bases = sum(overlap_bases[status == "-"]),
+#     gain_frac = gain_bases / arm_length,
+#     loss_frac = loss_bases / arm_length,
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     arm_status = case_when(
+#       gain_frac >= 0.5 & loss_frac < 0.5 ~ "gain",
+#       loss_frac >= 0.5 & gain_frac < 0.5 ~ "loss",
+#       gain_frac >= 0.5 & loss_frac >= 0.5 ~ "both",
+#       TRUE ~ "neutral"
+#     )
+#   )
+# 
+# # counting altered arms.
+# aneuploidy_scores <- arm_status %>%
+#   filter(arm_status %in% c("gain", "loss", "both")) %>%
+#   group_by(sample) %>%
+#   summarise(
+#     altered_arms = n(),
+#     gained_arms = sum(arm_status == "gain"),
+#     lost_arms = sum(arm_status == "loss"),
+#     both = sum(arm_status == "both"),
+#     .groups = "drop"
+#   )
+# 
+# aneuploidy_scores <- aneuploidy_scores %>%
+#   arrange(desc(altered_arms))
+# 
+# aneuploidy_scores <- aneuploidy_scores %>%
+#   left_join(metadata, by = c("sample" = "depmap_id"))
+# 
+# ###########################################################
+# 
+## Aneuploidy score: looking at arms similar to Taylor et. al and Knijnenburg et al.
 
-# hg38 cytoband arm data
-cytoband <- read.table("cytoBand.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE)
-colnames(cytoband) <- c("chromosome", "arm_start", "arm_end", "arm", "gieStain")
+# Loading cytoband file.
+cytoband <- read_tsv("cytoBand.txt", col_names = c("chrom", "chromStart", "chromEnd", "name", "gieStain"))
+
+# compressing cytoband into arms.
+cytoband <- cytoband %>%
+  mutate(arm = substr(name, 1, 1))
+
+acrocentric_chroms <- c("chr13", "chr14", "chr15", "chr21", "chr22")
+
+cytoband <- cytoband %>%
+  filter(!(chrom %in% acrocentric_chroms & arm == "q")) # removing q arms from the acrocentric chrom as per Taylor et. al paper.
+
+arm_level <- cytoband %>%
+  group_by(chrom, arm) %>%
+  summarise(
+    arm_start = min(chromStart),
+    arm_end = max(chromEnd),
+    .groups = "drop"
+  ) %>%
+  mutate(arm_label = paste0(chrom, arm)) %>%
+  filter(!chrom %in% c("chrX", "chrY")) %>%
+  filter(!is.na(arm)) # now the total is 39.
 
 # Removing "chr" prefix in chromosome.
-cytoband$chromosome <- gsub("^chr", "", cytoband$chromosome)
+arm_level$chrom <- gsub("^chr", "", arm_level$chrom)
 
-# creating genomic ranges.
+
+# Genomic ranges for segments.
 seg_gr <- GRanges(
   seqnames = seg$chromosome,
   ranges = IRanges(start = seg$start, end = seg$end),
@@ -144,13 +284,14 @@ seg_gr <- GRanges(
   status = seg$Status
 )
 
+# Genomic ranges for arms.
 arm_gr <- GRanges(
-  seqnames = cytoband$chromosome,
-  ranges = IRanges(start = cytoband$arm_start, end = cytoband$arm_end),
-  arm = cytoband$arm
+  seqnames = arm_level$chrom,
+  ranges = IRanges(start = arm_level$arm_start, end = arm_level$arm_end),
+  arm = arm_level$arm_label
 )
 
-# overlaps in cytoband and seg.
+# Overlaps
 hits <- findOverlaps(seg_gr, arm_gr)
 
 overlaps <- data.frame(
@@ -163,22 +304,19 @@ overlaps <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# Adding genomic coordinates for overlap calculations
 overlaps <- overlaps %>%
   mutate(
     seg_start = start(seg_gr)[seg_index],
     seg_end = end(seg_gr)[seg_index],
     arm_start = start(arm_gr)[arm_index],
-    arm_end = end(arm_gr)[arm_index]
-  ) %>%
-  mutate(
+    arm_end = end(arm_gr)[arm_index],
     overlap_start = pmax(seg_start, arm_start),
     overlap_end = pmin(seg_end, arm_end),
     overlap_bases = pmax(overlap_end - overlap_start + 1, 0)
   ) %>%
   filter(overlap_bases > 0)
 
-# assigning arm level alteration: if 50% or more of the arm is altered by gain or loss, it is counted.
+# Arm-level status
 arm_status <- overlaps %>%
   group_by(sample, chrom, arm) %>%
   summarise(
@@ -198,8 +336,22 @@ arm_status <- overlaps %>%
     )
   )
 
-# counting altered arms.
-aneuploidy_scores <- arm_status %>%
+#  complete grid of sample & arms.
+all_arms <- expand.grid(
+  sample = unique(seg$sample),
+  arm = arm_level$arm_label,
+  stringsAsFactors = FALSE
+)
+
+# Merging observed arm status with complete grid.
+arm_status_complete <- all_arms %>%
+  left_join(arm_status %>% dplyr::select(sample, arm, arm_status), by = c("sample", "arm")) %>%
+  mutate(
+    arm_status = ifelse(is.na(arm_status), "neutral", arm_status)
+  )
+
+### calculating aneuploidy score (max 39).
+aneuploidy_scores <- arm_status_complete %>%
   filter(arm_status %in% c("gain", "loss", "both")) %>%
   group_by(sample) %>%
   summarise(
@@ -220,10 +372,13 @@ aneuploidy_scores <- aneuploidy_scores %>%
 ggplot(aneuploidy_scores, aes(x = reorder(sample, -altered_arms), y = altered_arms, fill = TMMstatus)) +
   geom_bar(stat = "identity", position = "dodge") +
   theme_classic() +
-  labs(title = "Aneuploidy Score",
-       x = "Sample ID",
+  labs(x = "Sample ID",
        y = "Aneuploidy Score") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, size = 11),
+        axis.text.y = element_text(size = 11),
+        axis.title = element_text(size = 14),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 11))
 
 model <- lm(altered_arms ~ TMMstatus, data = aneuploidy_scores)
 summary_model <- summary(model)
@@ -235,6 +390,80 @@ legend("topright", legend = paste("R² =", round(summary_model$r.squared, 3),
                                   "\np-value =", round(summary_model$coefficients[2, 4], 4)),
        bty = "n", cex = 0.8)
 
+# violin plot.
+r_text <- paste0("R² = ", round(summary_model$r.squared, 3))
+
+
+ggplot(aneuploidy_scores, aes(x = TMMstatus, y = altered_arms, color = TMMstatus, fill = TMMstatus)) +
+  geom_violin(size = 0.2, draw_quantiles=c(0.5),alpha=0.5) +
+ geom_point(position = position_jitter(width = .08), size = 3)  +
+  scale_fill_manual(values=c("ALT"="lightblue","TA"="lightpink2")) + 
+  scale_color_manual(values=c("ALT"="blue", "TA"="darkred"))+ 
+  theme_classic() + 
+  labs(x = "Class", y = "Aneuploidy Scores") +
+  theme(
+    axis.title = element_text(size = 18),
+    axis.text = element_text(size = 15, face = "bold"), legend.position = "none") +
+  stat_compare_means(comparisons = list(c("ALT","TA")), method= "t.test",
+                     method.args = list(alternative ="two.sided"), size = 6, tip.length = 0.01) +  
+  annotate("text", x = 2, y = 50,
+           label = r_text, size = 6, fontface = "bold") 
+#  coord_cartesian(ylim = c(0, 1.1))
+
+# violin plot with boxplot.
+ggplot(aneuploidy_scores, aes(x = TMMstatus, y = altered_arms)) +
+  # Half violin.
+  geom_half_violin(
+    aes(fill = TMMstatus),
+    side = "r",
+    alpha = 0.5,
+    trim = TRUE
+  ) +
+  # Boxplot on left.
+  geom_boxplot(
+    aes(fill = TMMstatus),
+    width = 0.1,
+    position = position_nudge(x = -0.07),
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  # Jittered points.
+  geom_point(
+    aes(color = TMMstatus),
+    position = position_jitter(width = 0.1),
+    size = 3,
+    alpha = 1
+  ) +
+  scale_fill_manual(values = c("ALT" = "lightblue", "TA" = "lightpink2")) +
+  scale_color_manual(values = c("ALT" = "darkblue", "TA" = "darkred")) +
+  theme_classic() +
+  labs(x = "Class", y = "Aneuploidy Score") +
+  theme(
+    axis.title = element_text(size = 18),
+    axis.text = element_text(size = 15, face = "bold"),
+    legend.position = "none") +
+  stat_compare_means(comparisons = list(c("ALT","TA")), method= "t.test",
+                     method.args = list(alternative ="two.sided"), size = 6, tip.length = 0.01) +  
+  annotate("text", x = 1.5, y = 1,
+           label = r_text, size = 6, fontface = "bold") 
+
+## violin plot.
+
+# ggplot(aneuploidy_scores, aes(x = TMMstatus, y = altered_arms)) +
+# geom_flat_violin(position = position_nudge(x = .2, y = 0)) +
+#   geom_point(aes(color= "black"), 
+#              position = position_jitter(width = .15), size = 5) +
+#   geom_boxplot(width = .1, outlier.shape = NA,fill="white") +
+#   #expand_limits(x = 5.25) +
+#   guides(fill = FALSE) +
+#   guides(color = FALSE) +
+#   scale_color_brewer(palette = "Spectral") +
+#   scale_fill_brewer(palette = "Spectral") +
+#   theme_classic()+theme(axis.text.x=element_text(size=8,vjust=1,hjust=1),legend.position="none")+stat_compare_means(comparisons = c("ALT", "TA"), method= "t.test",size=2)
+
+rm(summary_model)
+rm(r_text)
+rm(model)
 
 
 ###################################################################################
