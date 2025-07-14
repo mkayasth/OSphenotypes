@@ -4,13 +4,9 @@
 -	Differential gene expression using Limma (p-value < 0.05 & logFC > 1.5): 171 candidates. 125 differentially upregulated in ALT and 46 differentially upregulated in TA.
 o	Volcano plot (TA vs. ALT).
 -	T-test (p-value < 0.01) followed by regression test (p-value < 0.01 & R2 > 0.3):  51 candidates: 39 ALT and 12 TA.
-o	For ALT and TA genes: heatmap + GSVA score.
--	ssGSEA Test: making all possible combination of 3, 4, 5 and 6 genes and running ssGSEA to see what combination of genes gives the best distinction between ALT and TA groups.
--	ssGSEA test (single sample gene enrichment method) to identify signature genes for each phenotype using R package GSVA from Bioconductor.
--	Made all possible combinations of 3 genes, 4 genes, 5 genes and 6 genes from the 51 differentially expressed genes using Combinat package in R.
--	Since we have a lot of genes overexpressed in ALT, there are a lot of possible combinations of ALT genes. Calculating mean difference between ALT and TA for the gene combinations and taking the top 50,000 with highest difference.
--	For each combination, performing t-test (p-value < 0.01) followed by regression test (p-value < 0.01): arranging by decreasing R2 value. Running gsva with the signature.
-o	Bar graph + boxplot of ssGSEA & GSVA.
+o	For ALT and TA genes / our signature (obtained later in the file): heatmap + GSVA score.
+- Finding the best signature by exhaustive method for each phenotype: starting with a pivot gene, adding every possible 2nd gene and selecting the one giving the lowest p-value, adding 3rd gene and so on. The process continues until all the gene is included in the signature or the p-value does not decrease.
+o	Bar graph + violin/boxplot of ssGSEA & GSVA.
 
 # somaticMutation.R:
 -	Making maf file: same gene may have different mutations. Making different headers for them by separating with & into different lines.
@@ -31,7 +27,7 @@ o	Mutational Signatures in ALT vs. TA: using NMF to extract de novo mutational s
 -	Limma for differential copy Number (p-value < 0.05, logFC > 0.75); volcano plot.  36 ALT, 18 Telomerase.
 -	T-test (p-value < 0.01) and R2 > 0.3: 4 ALT, 18 Telomerase.
 -	Looking at differential gene expression of differential copy number genes.
--	Integrated analysis of OS and ALT+TA genes (heatmaps of expression, copy number, fusion, mutation..)
+-	Integrated analysis of OS and ALT+TA genes and our signature (heatmaps of expression, copy number, fusion, mutation..)
 -	Preparing for gistic files – gistic continued in cnvBurden.R.
 
 # geneFusion.R:
