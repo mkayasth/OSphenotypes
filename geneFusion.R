@@ -1,4 +1,5 @@
 library(tidyverse)
+library(dplyr)
 library(biomaRt)
 library(stringr)
 
@@ -6,6 +7,7 @@ library(stringr)
 # Loading necessary rds files.
 fusion <- readRDS("OmicsFusionFiltered.RDS")
 metadata <- read_delim("Osteosarcoma_CellLines.txt")
+fusion <- left_join(fusion, metadata, by = c("SampleID" = "depmap_id"))
 
 right_counts <- table(fusion$RightGene) # fusion while gene is on the right side of the fusion.
 left_counts <- table(fusion$LeftGene) # fusion while gene is on the left side of the fusion.
@@ -103,11 +105,14 @@ gene_counts_long <- gene_counts_10 %>%
 ggplot(gene_counts_long, aes(x = reorder(Gene, -FusionCount), y = FusionCount, fill = Class)) +
   geom_bar(stat = "identity") +
   theme_classic() +
-  scale_fill_manual(values = c("ALT" = "blue", "TA" = "peachpuff4")) +
-  labs(x = "Gene", y = "Fusion Count", fill = "Class",
-       title = "Stacked Barplot of Gene Fusions by Class") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-          plot.title = element_text(hjust = 0.5))
+  scale_fill_manual(values = c("ALT" = "blue", "TA" = "darkred")) +
+  labs(x = "Gene", y = "Fusion Count", fill = "Class") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 14, face = "bold"),
+        axis.text.y = element_text(hjust = 1, size = 14, face = "bold"),
+        axis.title.x = element_text(size = 18),
+        axis.title.y = element_text(size = 18),
+        legend.title = element_text(size = 18, face = "bold"),
+        legend.text  = element_text(size = 16))
 
 
 ###################################################################################
@@ -130,14 +135,14 @@ fusionC1 <- fusionC1 %>%
     LeftGene = str_extract(LeftGene, "^[^ ]+"),
     RightGene = str_extract(RightGene, "^[^ ]+")
   ) %>%
-  distinct(SampleID, FusionName, LeftGene, RightGene) # for this test, we will be counting number of samples a particular gene has fused on. If TP53 fuses twice on the same sample, only counted as 1 for this test.
+  distinct(cell_line_display_name, FusionName, LeftGene, RightGene) # for this test, we will be counting number of samples a particular gene has fused on. If TP53 fuses twice on the same sample, only counted as 1 for this test.
 
 fusionC2 <- fusionC2 %>%
   mutate(
     LeftGene = str_extract(LeftGene, "^[^ ]+"),
     RightGene = str_extract(RightGene, "^[^ ]+")
   ) %>%
-  distinct(SampleID, FusionName, LeftGene, RightGene)
+  distinct(cell_line_display_name, FusionName, LeftGene, RightGene)
 
 View(head(sort(table(fusionC1$FusionName), decreasing = TRUE), n = 11))
 View(head(sort(table(fusionC2$FusionName), decreasing = TRUE), n = 14))
@@ -145,12 +150,12 @@ View(head(sort(table(fusionC2$FusionName), decreasing = TRUE), n = 14))
 # the highest occurence of a fusion is 2 for a phenotype. So, obviously none of the fusion events will be signficiant for one phenotype over the other.
 
 # bar graph showing distribution of fusion across samples.
-sampleCountC1 <- sort(table(fusionC1$SampleID), decreasing = TRUE)
+sampleCountC1 <- sort(table(fusionC1$cell_line_display_name), decreasing = TRUE)
 sampleCountC1 <- as.data.frame(sampleCountC1)
 colnames(sampleCountC1) <- c("SampleID", "FusionCount")
 sampleCountC1$Class <- "ALT"
 
-sampleCountC2 <- sort(table(fusionC2$SampleID), decreasing = TRUE)
+sampleCountC2 <- sort(table(fusionC2$cell_line_display_name), decreasing = TRUE)
 sampleCountC2 <- as.data.frame(sampleCountC2)
 colnames(sampleCountC2) <- c("SampleID", "FusionCount")
 sampleCountC2$Class <- "TA"
@@ -160,12 +165,17 @@ sampleCountCombined <- rbind(sampleCountC1, sampleCountC2)
 
 
 ggplot(sampleCountCombined, aes(x = SampleID, y = FusionCount, fill = Class)) +
+  scale_fill_manual(values = c("ALT" = "blue", "TA" = "darkred")) +
   geom_bar(stat = "identity", position = "dodge") +
   theme_classic() +
-  labs(title = "Fusion Counts per Sample",
-       x = "Sample ID",
+  labs(x = "Cell Line",
        y = "Number of Fusions") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 10, face = "bold"),
+        axis.text.y = element_text(hjust = 1, size = 12, face = "bold"),
+        axis.title.x = element_text(size = 16),
+        axis.title.y = element_text(size = 16),
+        legend.title = element_text(size = 18, face = "bold"),
+        legend.text  = element_text(size = 16))
 
 
 ### Instead of looking at a complete fusion event, looking at differential presence of a particular gene in fusion events.
@@ -283,16 +293,37 @@ fusion_summary$NumberOfTAsamplesWithFusion <- sapply(gene_list, function(gene) {
   sum(fusion_matrix[[gene]] == 1 & fusion_matrix$TMMstatus == "TA")
 })
 
-#Filter for fusions present in both
+# Filter for fusions present in both
 fusion_summary_shared <- fusion_summary %>%
   filter(NumberOfAltSamplesWithFusion >= 1 & NumberOfTAsamplesWithFusion >= 1)
 
 # rank by average or minimum count.
-fusion_summary_shared <- fusion_summary_shared %>%
+fusion_summary_shared <- fusion_summary %>%
   mutate(AvgCount = (NumberOfTAsamplesWithFusion + NumberOfAltSamplesWithFusion) / 2) %>%
   arrange(desc(AvgCount)) 
 
-
 # TP53 the most common fusion across both phenotypes.
+fusion_summary_long <- head(fusion_summary_shared, n =10) %>%
+  dplyr::select(Gene, NumberOfAltSamplesWithFusion, NumberOfTAsamplesWithFusion) %>%
+  pivot_longer(cols = c(NumberOfAltSamplesWithFusion, NumberOfTAsamplesWithFusion), 
+               names_to = "Class", 
+               values_to = "FusionCount") %>%
+  mutate(Class = case_when(
+    Class == "NumberOfAltSamplesWithFusion" ~ "ALT",
+    Class == "NumberOfTAsamplesWithFusion" ~ "TA"
+  ))
+
+
+ggplot(fusion_summary_long, aes(x = reorder(Gene, -FusionCount), y = FusionCount, fill = Class)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  scale_fill_manual(values = c("ALT" = "blue", "TA" = "darkred")) +
+  labs(x = "Gene", y = "Fusion Count", fill = "Class") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 14, face = "bold"),
+        axis.text.y = element_text(hjust = 1, size = 14, face = "bold"),
+        axis.title.x = element_text(size = 18),
+        axis.title.y = element_text(size = 18),
+        legend.title = element_text(size = 18, face = "bold"),
+        legend.text  = element_text(size = 16))
 
 
