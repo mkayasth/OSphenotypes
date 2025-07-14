@@ -1,6 +1,8 @@
 library(tidyverse)
 library(biomaRt)
 library(ComplexHeatmap)
+library(ggpubr)
+library(gghalves)
 library(grid)
 library(gridExtra)
 library(patchwork)
@@ -23,10 +25,16 @@ geneExpression_telomerase_scores$Class <- metadata$TMMstatus[match(rownames(gene
 ggplot(geneExpression_telomerase_scores, aes(x = reorder(rownames(geneExpression_telomerase_scores), NormEXTENDScores), y = NormEXTENDScores, fill = Class)) +
   geom_bar(stat = "identity", position = "dodge") +
   theme_classic() +
-  labs(title = "EXTEND Scores Across OS Samples",
-       x = "Sample ID",
+  labs(x = "Sample ID",
        y = "Normalized EXTEND Scores") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(
+  axis.text.x = element_text(angle = 90, hjust = 1, size = 16),
+  axis.title.x = element_text(size = 24),
+  axis.title.y = element_text(size = 24),
+  axis.text.y  = element_text(size = 18, face = "bold"),
+  legend.title = element_text(size = 18, face = "bold"),
+  legend.text  = element_text(size = 16)
+)
 
 
 
@@ -39,7 +47,69 @@ legend("topright", legend = paste("R² =", round(summary_model$r.squared, 3),
                                   "\np-value =", round(summary_model$coefficients[2, 4], 4)),
        bty = "n", cex = 0.8)
 
+# violin plot.
+
+# First, extracting the text for violin plot.
+r_text <- paste0("R² = ", round(summary_model$r.squared, 3))
+
+ggplot(geneExpression_telomerase_scores, aes(x = Class, y = NormEXTENDScores, fill = Class, color = Class)) +
+  geom_violin(size=0.2, draw_quantiles=c(0.5),alpha=0.5) +
+  geom_point(position = position_jitter(width = .08), size = 3)  + scale_fill_manual(values=c("ALT"="lightblue","TA"="lightpink2")) + 
+  scale_color_manual(values=c("ALT"="blue", "TA"="darkred"))+ theme_classic() + 
+  labs(x = "Class", y = "Normalized EXTEND Scores") +
+  theme(
+    axis.title = element_text(size = 20),
+    axis.text = element_text(size = 16, face = "bold"), legend.position = "none") +
+  stat_compare_means(comparisons = list(c("ALT","TA")), method= "t.test",
+                     method.args = list(alternative ="two.sided"), size = 8, tip.length = 0.01,
+                     label.y = 1.05) +  
+  annotate("text", x = 2, y = 0.3,
+            label = r_text, size = 8, fontface = "bold")  +
+coord_cartesian(ylim = c(0, 1.1))
+
+
+# violin plot with boxplot.
+ggplot(geneExpression_telomerase_scores, aes(x = Class, y = NormEXTENDScores)) +
+  # Half violin.
+  geom_half_violin(
+    aes(fill = Class),
+    side = "r",
+    alpha = 0.5,
+    trim = TRUE
+  ) +
+  # Boxplot on left.
+  geom_boxplot(
+    aes(fill = Class),
+    width = 0.1,
+    position = position_nudge(x = -0.07),
+    outlier.shape = NA,
+    alpha = 0.5
+  ) +
+  # Jittered points.
+  geom_point(
+    aes(color = Class),
+    position = position_jitter(width = 0.1),
+    size = 3,
+    alpha = 1
+  ) +
+  scale_fill_manual(values = c("ALT" = "lightblue", "TA" = "lightpink2")) +
+  scale_color_manual(values = c("ALT" = "darkblue", "TA" = "darkred")) +
+  theme_classic() +
+  labs(x = "Class", y = "Normalized EXTEND Scores") +
+  coord_cartesian(ylim = c(0, 1.05)) +
+  theme(
+    axis.title = element_text(size = 20),
+    axis.text = element_text(size = 16, face = "bold"),
+    legend.position = "none") +
+  stat_compare_means(comparisons = list(c("ALT","TA")), method= "t.test",
+                     method.args = list(alternative ="two.sided"), size = 8, tip.length = 0.01,
+                     label.y = 1.05) +  
+  annotate("text", x = 2, y = 0.3,
+           label = r_text, size = 8, fontface = "bold")  +
+  coord_cartesian(ylim = c(0, 1.1))
+
 rm(summary_model)
+rm(r_text)
 rm(model)
 
 
@@ -65,11 +135,25 @@ geneExpression_telomerase_scores <- sort_by(geneExpression_telomerase_scores, ge
 cor_val <- cor(geneExpression_telomerase_scores$NormEXTENDScores, geneExpression_telomerase_scores$TERT, method = "pearson")
 r_text <- paste("r =", round(cor_val, 3))
 
-ggplot(geneExpression_telomerase_scores, aes(y= TERT, x= NormEXTENDScores, colour = Class)) + 
-  geom_point(size = 3, alpha = 0.9) + 
-  theme_classic() + geom_smooth(method = "lm", se = TRUE, color = "white", fill = "lightgray") + 
-  annotate("text", x = Inf, y = Inf, label = r_text,
-          hjust = 1.1, vjust = 1.5, size = 4)
+ggplot(geneExpression_telomerase_scores, aes(y = TERT, x = NormEXTENDScores, colour = Class)) + 
+  scale_color_manual(values = c("ALT" = "darkblue", "TA" = "darkred")) + 
+  geom_point(size = 6, alpha = 0.9) + 
+  labs(x = "Normalized EXTEND Scores", y = "TERT expression") + 
+  geom_smooth(method = "lm", level = 0.90, se = TRUE, color = "black", fill = "lightgray") + 
+  annotate("text", x = 0.25, y = 2, label = r_text, size = 10) +
+  theme_classic() +
+  theme(
+    axis.title.x = element_text(size = 24),
+    axis.title.y = element_text(size = 24),
+    axis.text.x  = element_text(size = 18, face = "bold"),
+    axis.text.y  = element_text(size = 18, face = "bold"),
+    legend.title = element_text(size = 18, face = "bold"),
+    legend.text  = element_text(size = 16),
+    legend.position = c(0.9, 0.2)
+  )
+
+ 
+
 
 #################################################################################
 
