@@ -121,6 +121,44 @@ ta_expression <- ta_expression %>%
 # 
 # rm(top_labels)
 
+#Volcano plot ~ all samples.
+
+# top labels -- signature genes obtained from iterative selection performed at the end of this file.
+top_labels <- c("GASK1B", "SYCP2", "H2BC11", "MAB21L2", "CLSTN3", "ELOVL4", "MAP9", "COL24A1", "PGM2L1", "STK32A", "CRYAB", "ARMH4", "LFNG", "SYTL5", "CCL28",
+                "TERT", "CCDC8", "ALDH1A3", "ERICH1", "TDRP", "SHFL", "DNPH1", "IRX2")
+
+EnhancedVolcano(ta_expression,
+                lab = rownames(ta_expression),
+                x = 'logFC',
+                y = 'P.Value',
+                selectLab = top_labels,  # highlighting signature genes.
+                xlab = bquote(~Log[2]~ 'fold change'),
+                ylab = bquote(~-Log[10]~ 'P-value'),
+                title = NULL,
+                subtitle = NULL,
+                pCutoff = 0.05,
+                FCcutoff = 1.5,
+                pointSize = 2.0,
+                arrowheads = FALSE,
+                labFace = 'bold',
+                boxedLabels = TRUE,
+                labSize = 5.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.3,
+                colAlpha = 0.8,
+                legendLabels = c('Not Significant','Significant logFC','Significant P-value ','Significant P-value & LogFC'),
+                col = c('grey80', 'grey50', 'grey25', 'purple'),
+                ylim = c(0, 5),
+                caption = "Cutoffs: P < 0.05, |Log2FC| > 1.5"
+) + theme_classic() + 
+  theme(axis.title = element_text(size = 18),
+        axis.text = element_text(size = 15),
+        legend.text = element_text(size = 12),
+        legend.title = element_blank(),
+        plot.caption = element_text(size = 14))
+
+
+
 
 #####################################################################################
 
@@ -385,7 +423,7 @@ draw(h1, heatmap_legend_side = "right", annotation_legend_side = "right",
      padding = unit(c(0, 0, 0, 0), "mm"))
 dev.off()
 
-########## heatmap + gsva annotation for our signature.
+########## heatmap + gsva annotation for our signature -- from the best_signature function done at the end of this file.
 
 gene_alts <- list("ALT Genes" = c("GASK1B", "SYCP2", "H2BC11", "MAB21L2", "CLSTN3", 
                                   "ELOVL4", "MAP9", "COL24A1", "PGM2L1", "STK32A", "CRYAB", 
@@ -513,7 +551,7 @@ dev.off()
 # ### First, we will do ssGSEA test from all ALT genes and all Telomerase genes.
 # 
 # #  Telomerase set.
-# gene_set_list_ta <- list(geneSignature_candidates$Gene[geneSignature_candidates$gene_status == "Telomerase"])
+#gene_set_list_ta <- list(geneSignature_candidates$Gene[geneSignature_candidates$gene_status == "Telomerase"])
 # ta_ssgsea <- ssgseaParam(geneExpression, gene_set_list_ta, normalize = TRUE)
 # ssGSEA_result_ta <- gsva(ta_ssgsea)
 # ssGSEA_df_ta <- as.data.frame(ssGSEA_result_ta)
@@ -522,7 +560,7 @@ dev.off()
 # 
 # 
 # # ALT set.
-# gene_set_list_alt <- list(geneSignature_candidates$Gene[geneSignature_candidates$gene_status == "ALT"])
+#gene_set_list_alt <- list(geneSignature_candidates$Gene[geneSignature_candidates$gene_status == "ALT"])
 # alt_ssgsea <- ssgseaParam(geneExpression, gene_set_list_alt, normalize = TRUE)
 # ssGSEA_result_alt <- gsva(alt_ssgsea)
 # ssGSEA_df_alt <- as.data.frame(ssGSEA_result_alt)
@@ -1255,6 +1293,10 @@ dev.off()
 
 # ssgsea function: finding the best signature by exhaustive method.
 
+gene_set_list_ta <- list(geneSignature_candidates$Gene[geneSignature_candidates$gene_status == "Telomerase"])
+gene_set_list_alt <- list(geneSignature_candidates$Gene[geneSignature_candidates$gene_status == "ALT"])
+
+
 # making the function first.
 best_signature <- function(pivot_gene, candidate_genes, expression_matrix, phenotype_vector, 
                                     phenotype_labels = c("ALT", "TA")) {
@@ -1441,42 +1483,6 @@ ggplot(GSVA_long_alt, aes(x = SampleID, y = GSVA_Score, fill = TMMstatus)) +
 
 
 
-#Volcano plot ~ all samples.
-
-# top labels -- signature genes.
-top_labels <- c("GASK1B", "SYCP2", "H2BC11", "MAB21L2", "CLSTN3", "ELOVL4", "MAP9", "COL24A1", "PGM2L1", "STK32A", "CRYAB", "ARMH4", "LFNG", "SYTL5", "CCL28",
-                "TERT", "CCDC8", "ALDH1A3", "ERICH1", "TDRP", "SHFL", "DNPH1", "IRX2")
-
-EnhancedVolcano(ta_expression,
-                lab = rownames(ta_expression),
-                x = 'logFC',
-                y = 'P.Value',
-                selectLab = top_labels,  # highlighting signature genes.
-                xlab = bquote(~Log[2]~ 'fold change'),
-                ylab = bquote(~-Log[10]~ 'P-value'),
-                title = NULL,
-                subtitle = NULL,
-                pCutoff = 0.05,
-                FCcutoff = 1.5,
-                pointSize = 2.0,
-                arrowheads = FALSE,
-                labFace = 'bold',
-                boxedLabels = TRUE,
-                labSize = 5.0,
-                drawConnectors = TRUE,
-                widthConnectors = 0.3,
-                colAlpha = 0.8,
-               legendLabels = c('Not Significant','Significant logFC','Significant P-value ','Significant P-value & LogFC'),
-                col = c('grey80', 'grey50', 'grey25', 'purple'),
-                ylim = c(0, 5),
-                caption = "Cutoffs: P < 0.05, |Log2FC| > 1.5"
-) + theme_classic() + 
-  theme(axis.title = element_text(size = 18),
-      axis.text = element_text(size = 15),
-      legend.text = element_text(size = 12),
-      legend.title = element_blank(),
-      plot.caption = element_text(size = 14))
-
 
 
 
@@ -1498,3 +1504,4 @@ EnhancedVolcano(ta_expression,
 # rm(top_labels)
 
 
+##########################################
