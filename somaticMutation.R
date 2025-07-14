@@ -8,8 +8,14 @@ library("mclust")
 somaticMutation <- readRDS("OmicsSomaticMutations.RDS")
 metadata <- read_delim("Osteosarcoma_CellLines.txt")
 
+somaticMutation <- somaticMutation %>%
+  left_join(
+    metadata %>% 
+      dplyr::select(depmap_id, cell_line_display_name),
+    by = c("ModelID" = "depmap_id")
+  )
 
-### making maf object.
+### making MAF object.
 
 maf_file <- data.frame(
   Hugo_Symbol = somaticMutation$HugoSymbol,
@@ -20,7 +26,7 @@ maf_file <- data.frame(
   Tumor_Seq_Allele2 = somaticMutation$Alt,
   Variant_Type = somaticMutation$VariantType,
   Variant_Classification = somaticMutation$VariantInfo,
-  Tumor_Sample_Barcode = somaticMutation$ModelID,
+  Tumor_Sample_Barcode = somaticMutation$cell_line_display_name,
   AF = somaticMutation$AF,
   RefCount = somaticMutation$RefCount,
   AltCount = somaticMutation$AltCount,
@@ -86,8 +92,8 @@ maf_file <- maf_file %>%
 write.table(maf_file, file = "Output/output.maf", sep = "\t", quote = FALSE, row.names = FALSE)
 
 # c1 for ALT and c2 for TA phenotypes.
-c1_samples <- metadata$depmap_id[metadata$TMMstatus == "ALT"]
-c2_samples <- metadata$depmap_id[metadata$TMMstatus == "TA"]
+c1_samples <- metadata$cell_line_display_name[metadata$TMMstatus == "ALT"]
+c2_samples <- metadata$cell_line_display_name[metadata$TMMstatus == "TA"]
 
 maf_c1 <- maf_file[maf_file$Tumor_Sample_Barcode %in% c1_samples, ]
 maf_c2 <- maf_file[maf_file$Tumor_Sample_Barcode %in% c2_samples, ]
@@ -169,7 +175,7 @@ ggplot(geneSummaryC2, aes(x = Hugo_Symbol, y = MutatedSamples, color = Group)) +
 ### drawing oncoplot for top 20 genes.
 pdf("output/OncoplotAllSamples.pdf")
 par(oma = c(1, 1, 1, 1))
-oncoplot(maf = maf, top = 20, sampleOrder = metadata$depmap_id)
+oncoplot(maf = maf, top = 20, sampleOrder = metadata$cell_line_display_name)
 dev.off()
 
 oncoplot(maf = mafC1, top = 20)
@@ -245,18 +251,91 @@ genes = unique(c("TP53","RB1",
                  "TERT","MYCN", "DLG2", "PTPRQ", "ZFHX4",
                  "TP53", "ALK", "FLG", "KMT2D", "EWSR1", "RB1", "WT1", "CDKN2A", "KMT2B", "NF1",
                  "MAP3K4", "ATRX", "CIC", "ASPCR1", "STAG2", "IGF1R", "PTEN", "CDK4", "PDGFRA2",
-                 "MYC", "BRAF", "KRAS", "NRAS", "IGF1R", "KMT2C", "PALB2", "CCNE1", "COPS3", "DLEU1", "KDR", "DAXX"))
+                 "MYC", "BRAF", "KRAS", "NRAS", "IGF1R", "KMT2C", "PALB2", "CCNE1", "COPS3", "DLEU1", "KDR", "DAXX", "FANCM", "FANCD2",
+                 "DAXX", "SLX4",
+                 "MUS81", 
+                 "PML", 
+                 "RAD51", 
+                "ASF1B",
+                 "CHEK1",
+                 "FANCM",
+                "FANCD2",
+                 "BLM",
+                 "SMARCA5",
+                 "CHD4",
+                "BRCA2",
+                 "TOP3A",
+                "TERT",
+                 "DKC1",
+                 "GAR1",
+                 "MYC"))
 
-coOncoplot(m1 = mafC1, m2 = mafC2, m1Name = 'ALT', m2Name = 'TA', genes = genes, removeNonMutated = FALSE)
+coOncoplot(m1 = mafC1,
+           m2 = mafC2,
+           m1Name = 'ALT', 
+           m2Name = 'TA', 
+           genes = genes, 
+           removeNonMutated = FALSE,
+           sepwd_genes1 = 1,
+           sepwd_samples1 = 1,
+           sepwd_genes2 = 1,
+           sepwd_samples2 = 1,
+           legend_height = 15,
+           showSampleNames = TRUE,
+           SampleNamefont = 0.8,
+           barcode_mar = 6,
+           gene_mar = 0.8,
+           outer_mar = 7,
+           geneNamefont = 0.8,
+           keepGeneOrder = TRUE,
+          sampleOrder1 = metadata$cell_line_display_name
+           )
 
 # coOncoplot, in default settings, removes genes with 0 mutation across the two phenotypes. coBarplot does not. Manually doing so.
 genes_filtered <- genes[genes %in% mafC1@data$Hugo_Symbol | genes %in% mafC2@data$Hugo_Symbol]
-coBarplot(m1 = mafC1, m2 = mafC2, m1Name = "ALT", m2Name = "TA", genes = genes)
+
+pdf("output/coBarPlotOSGenes.pdf", width = 5, height = 5)
+par(mar = c(0, 3, 3, 3))
+coBarplot(m1 = mafC1, m2 = mafC2,
+          m1Name = "ALT", m2Name = "TA", 
+          genes = genes_filtered,
+          normalize = TRUE,
+          borderCol = "gray",
+          titleSize = 1.5,
+          geneMar = 6,
+          geneSize = 1,
+          showPct = TRUE,
+          pctSize = 1,
+          axisSize = 1,
+          legendTxtSize = 1,
+          yLims = c(40,40)
+          )
+dev.off()
 
 # co-oncoplot with genes known to mutate in ALT/TA from literature.
 genes = c("ATRX", "DAXX", "FANCM", "BLM", "PML", "FANCD2", "UBR5", "RAD21", "SENP5", "NSMCE2", "RFC4", "MCPH1", "RECQL4", "ARID1A", "CCT5", "LRATD2", "RAD1", "SP100", "TERT", "TERC", "POT1", "TINF2", "DKC1")
 
-coOncoplot(m1 = mafC1, m2 = mafC2, m1Name = 'ALT', m2Name = 'TA', genes = genes, removeNonMutated = FALSE)
+coOncoplot(m1 = mafC1, 
+           m2 = mafC2, 
+           m1Name = 'ALT', 
+           m2Name = 'TA', 
+           genes = genes, 
+           removeNonMutated = FALSE,
+           borderCol = "white",
+           sepwd_genes1 = 1,
+           sepwd_samples1 = 1,
+           sepwd_genes2 = 1,
+           sepwd_samples2 = 1,
+           legend_height = 15,
+           showSampleNames = TRUE,
+           SampleNamefont = 0.8,
+           barcode_mar = 6.5,
+           gene_mar = 0.8,
+           outer_mar = 3,
+           geneNamefont = 0.8,
+           keepGeneOrder = TRUE,
+           sampleOrder1 = metadata$cell_line_display_name
+           )
 
 # coOncoplot, in default settings, removes genes with 0 mutation across the two phenotypes. coBarplot does not. Manually doing so.
 genes_filtered <- genes[genes %in% mafC1@data$Hugo_Symbol | genes %in% mafC2@data$Hugo_Symbol]
@@ -325,10 +404,14 @@ mafC1.sig = extractSignatures(mat = mafC1.tnm, n = 5)
 mafC1.og30.cosm = compareSignatures(nmfRes = mafC1.sig, sig_db = "SBS")
 
 library('pheatmap')
-pheatmap::pheatmap(mat = mafC1.og30.cosm$cosine_similarities, cluster_rows = FALSE, main = "cosine similarity against validated signatures")
+pheatmap::pheatmap(mat = mafC1.og30.cosm$cosine_similarities, 
+                   cluster_rows = FALSE,
+                   cellwidth = 9,
+                   cellheight = 10)
 
 # finally signatures.
-maftools::plotSignatures(nmfRes = mafC1.sig, title_size = 1.2, sig_db = "SBS")
+maftools::plotSignatures(nmfRes = mafC1.sig, title_size = 1.5, sig_db = "SBS",  
+                         font_size = 1.5, axis_lwd = 3, show_barcodes = TRUE,  yaxisLim = 0.2)
 
 
 # TA samples.
@@ -349,14 +432,19 @@ mafC2.sig = extractSignatures(mat = mafC2.tnm, n = 4)
 mafC2.og30.cosm = compareSignatures(nmfRes = mafC2.sig, sig_db = "SBS")
 
 
-pheatmap::pheatmap(mat = mafC2.og30.cosm$cosine_similarities, cluster_rows = FALSE, main = "cosine similarity against validated signatures")
+pheatmap::pheatmap(mat = mafC2.og30.cosm$cosine_similarities, 
+                   cluster_rows = FALSE, 
+                   cellwidth = 9,
+                   cellheight = 10
+                   )
 
 # finally signatures.
-maftools::plotSignatures(nmfRes = mafC2.sig, title_size = 1.2, sig_db = "SBS")
+maftools::plotSignatures(nmfRes = mafC2.sig, title_size = 1.5, sig_db = "SBS",  
+                         font_size = 1.5, axis_lwd = 3, show_barcodes = TRUE,  yaxisLim = 0.2)
 
 
 
-##############
+###################################################################################
 
 ### Looking at mutation rates of differentially expressed genes.
 differentialGenes <- readRDS("Output/geneSignatureCandidates.rds") # from rnaSeq.R.
