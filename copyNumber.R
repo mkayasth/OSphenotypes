@@ -27,103 +27,6 @@ copyNumber <- copyNumber[match(metadata$depmap_id, rownames(copyNumber)), ]
 # arranging the data for copyNumber as per the metadata.
 copyNumber <- t(copyNumber)
 
-# 
-# ### using edgeR for differential number of copy numbers across each groups.
-# 
-# # Building model matrix.
-# 
-# # different factors of the samples.
-# class1 <- as.factor(metadata$TMMstatus)
-# 
-# # model matrix ~ without an intercept term.
-# design <- model.matrix(~class1+0)
-# 
-# # differential expression object.
-# copyNumber <- na.omit(copyNumber)
-# copyNumber_DGE <- DGEList(counts=copyNumber, group=class1)
-# 
-# 
-# # TMM normalization for calculating normalization factor.
-# copyNumber_DGE <- calcNormFactors(copyNumber_DGE)
-# 
-# 
-# # Calculating dispersion and fitting the model.
-# d <- estimateDisp(copyNumber_DGE, design, verbose=TRUE)
-# fit <- glmQLFit(d, design)
-# 
-# # contrast parameter (TA-ALT).
-# contrast <- makeContrasts(class1TA-class1ALT, levels=design)
-# 
-# # differential expression test.
-# fit2 <- glmQLFTest(fit, contrast = contrast)
-# 
-# # Adjusted p-value (False discovery rate correction.)
-# fit2$table$fdr <- p.adjust(fit2$table$PValue, method ="BH") 
-# 
-# # Now, in fit2$table, gene name is a rowname. Making it a column of its own called gene.
-# fit_expression <- fit2$table
-# fit_expression$gene <- rownames(fit_expression)
-# 
-# # filtering for candidate genes. C2 refers to genes upregulated in TA and C1 refers to ALT phenotype.
-# candidate_genes_C2 <- fit_expression[c(fit_expression$PValue <= 0.05 & fit_expression$logFC > 0.5), ]
-# # candidate_genes_C1
-# 
-# candidate_genes_C1 <- fit_expression[c(fit_expression$PValue <= 0.05 & fit_expression$logFC < -0.5), ]
-# # candidate_genes_C2
-# 
-# # binding candidate genes together.
-# all_candidates <- rbind(candidate_genes_C1, candidate_genes_C2)
-# all_candidates$gene <- rownames(all_candidates)
-# 
-# mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", version=113)
-# 
-# # Retrieving the Ensembl gene IDs and gene biotype (protein coding)
-# protein_coding_genes <- getBM(attributes = c("hgnc_symbol", "gene_biotype"),
-#                               filters="biotype",
-#                               values = "protein_coding",
-#                               mart = mart)
-# 
-# # Filtering genes to only include protein-coding genes.
-# all_candidates2 <- all_candidates %>%
-#   filter(gene %in% protein_coding_genes$hgnc_symbol)
-# 
-# # genes from C1 will have gene status ALT and genes from C2 will have gene status TA.
-# all_candidates2 <- all_candidates2 %>%
-#   mutate(`Gene Status` = case_when(
-#     gene %in% candidate_genes_C1$gene ~ "Low Copy Number in TA Samples",
-#     gene %in% candidate_genes_C2$gene ~ "High Copy Number in TA Samples",
-#     TRUE ~ "Not Significant"))
-# 
-# 
-# # doing this for the fit_expression table just for the volcano plot, where all genes are included.
-# fit_expression <- fit_expression %>%
-#   mutate(`Gene Status` = case_when(
-#     gene %in% candidate_genes_C1$gene ~ "Low Copy Number in TA Samples",
-#     gene %in% candidate_genes_C2$gene ~ "High Copy Number in TA Samples",
-#     TRUE ~ "Not Significant"))
-# 
-# # Top 10 Genes in terms of fold change (to label in the volcano plot).
-# ALT_top5 <- all_candidates2 %>%
-#   arrange(desc(logFC)) %>%
-#   slice_head(n = 5)
-# 
-# TA_top5 <- all_candidates2 %>%
-#   arrange(logFC) %>%
-#   slice_head(n= 5)
-# 
-# 
-# #Volcano plot ~ all samples.
-# ggplot(data = fit_expression, aes(x = logFC, y = -log10(PValue), color = `Gene Status`)) +
-#   geom_point() + 
-#   scale_color_manual(values = c("High Copy Number in TA Samples" = "red", "Low Copy Number in TA Samples" = "blue")) +
-#   theme_classic() + geom_text_repel(data = bind_rows(ALT_top5, TA_top5),
-#                                   aes(label = gene),
-#                                    vjust = 0.5, hjust = 0.5, size = 3,
-#                                   color = "black", box.padding = 0.5,
-#                                   point.padding = 0.5, max.overlaps = Inf)
-# 
-# 
-# copyNumberCandidates <- copyNumber[rownames(copyNumber) %in% all_candidates2$gene, ]
 
 ### using limma for differential number of copy numbers across each groups: data is continuous.
 
@@ -165,18 +68,7 @@ ta_candidates <- ta_results[ta_results$P.Value < 0.05 & ta_results$logFC > 0.75,
 # binding candidate genes together.
 all_candidates <- rbind(alt_candidates, ta_candidates)
 all_candidates$gene <- rownames(all_candidates)
-# 
-# mart <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", version=113)
-# 
-# # Retrieving the Ensembl gene IDs and gene biotype (protein coding)
-# protein_coding_genes <- getBM(attributes = c("hgnc_symbol", "gene_biotype"),
-#                               filters="biotype",
-#                               values = "protein_coding",
-#                               mart = mart)
-# 
-# # Filtering genes to only include protein-coding genes.
-# all_candidates2 <- all_candidates %>%
-#   filter(gene %in% protein_coding_genes$hgnc_symbol)
+
 
 # genes from ALT will have gene status ALT and genes from TA will have gene status TA.
 all_candidates <- all_candidates %>%
@@ -191,13 +83,7 @@ copyNumberCandidates <- copyNumber[rownames(copyNumber) %in% all_candidates$gene
 
 ta_expression <- ta_results[, c("logFC", "P.Value")]
 alt_expression <- alt_results[, c("logFC", "P.Value")]
-# 
-# ta_expression <- ta_expression %>%
-#   mutate("Gene Status" = case_when(
-#     ta_results$logFC > 0.75 & ta_results$P.Value < 0.05 ~ "High Copy Number in TA samples.",
-#     ta_results$logFC < -0.75 & ta_results$P.Value < 0.05 ~ "Low Copy Number in TA samples.",
-#     TRUE ~"Not Significant"
-#   ))
+
 
 # Top 5 Genes in terms of fold change (to label in the volcano plot). Red denotes most copy number in TA and blue denotes least copy number in ALT phenotype.
 ta_top5 <- ta_expression %>%
@@ -215,26 +101,6 @@ top_labels <- bind_rows(
   ta_bottom5 %>% rownames_to_column("Gene")
 )
 
-# .
-# ggplot(data = ta_expression, aes(x = logFC, y = -log10(P.Value), color = `Gene Status`)) +
-#   geom_point() + 
-#   scale_color_manual(values = c("High Copy Number in TA samples." = "red", "Low Copy Number in TA samples." = "blue")) +
-#   theme_classic() + geom_text_repel(data = top_labels,
-#                                     aes(label = Gene),
-#                                     vjust = 0.2, hjust = 0.2, size = 4.0,
-#                                     color = "black", box.padding = 0.3,
-#                                     point.padding = 0.3, max.overlaps = Inf) +
-#   theme(
-#     legend.position = c(0.85, 0.5),
-#     legend.title = element_text(size = 12),
-#     legend.text = element_text(size = 10),
-#     #legend.box.margin = margin(0, 2, 0, 2),
-#     #legend.spacing = unit(1, "mm"),
-#     axis.title.x = element_text(size = 18),
-#     axis.title.y = element_text(size = 18),
-#     axis.text.x  = element_text(size = 12, face = "bold"),
-#     axis.text.y  = element_text(size = 12, face = "bold")
-#   )
 
 # Volcano plot ~ all samples
 EnhancedVolcano(ta_expression,
@@ -675,9 +541,9 @@ dev.off()
 
 # CDKN2A (overexpression), PTEN (underexpression), MDM2(overexpression), COPS3(overexpression), CDK4 (overexpression), MYC (overexpression) matches with changes in copy number. 
 
-##################################################################
+###################################################################################################################################
 
-## similar to what we just did, but adding heatmaps for everything: expression, fusion, mutation, copy number.
+## similar to what we just did, but adding heatmaps for everything: expression, fusion, mutation, copy number. This is the final integrative analysis.
 
 ##### looking at copy number + expression of genes + fusion + mutation from OS literature with heatmap.
 OS_gene <- c("TP53", "RB1", "MDM2", "MYCN", "DLG2", "PTPRQ", "ZFHX4", "ALK",
@@ -933,16 +799,16 @@ draw(ht_combined, heatmap_legend_side = "right",
      padding = unit(c(0, 0, 0, 0), "mm"))
 dev.off()
 
-# trying different grids here...
-ht1g <- grid.grabExpr(draw(ht1 + ht2, newpage = FALSE))
-ht2g <- grid.grabExpr(draw(ht3 + ht4, newpage = FALSE))
+# # trying different grids here...
+# ht1g <- grid.grabExpr(draw(ht1 + ht2, newpage = FALSE))
+# ht2g <- grid.grabExpr(draw(ht3 + ht4, newpage = FALSE))
 
 
-# Arrange them in a 2x1 vertical layout
-pdf("Output/2x2_heatmap_grid.pdf", width = 14, height = 11)
-grid.arrange(ht1g, ht2g, ncol = 1,
-             top = textGrob("Heatmap For Expression, Copy Number, Mutation and Gene Fusions", gp = gpar(fontsize = 16, fontface = "bold"), just = "center"))
-dev.off()
+# # Arrange them in a 2x1 vertical layout
+# pdf("Output/2x2_heatmap_grid.pdf", width = 14, height = 11)
+# grid.arrange(ht1g, ht2g, ncol = 1,
+#              top = textGrob("Heatmap For Expression, Copy Number, Mutation and Gene Fusions", gp = gpar(fontsize = 16, fontface = "bold"), just = "center"))
+# dev.off()
 
 
 
@@ -952,7 +818,7 @@ dev.off()
 
 ########################################################################################
 
-### Now making heatmaps with ALT & TA genes.
+### Now making heatmaps with ALT & TA genes: integrative analysis also.
 gene_alts <- c("ATRX", "DAXX", "SLX4", "MUS81", "PML", "RAD51", "ASF1B", "CHEK1", "FANCM", "FANCD2", "BLM", "SMARCA5", "CHD4", "BRCA2", "TOP3A")
 gene_tas <- c("TERT", "DKC1", "GAR1", "MYC")
 
@@ -1176,6 +1042,7 @@ dev.off()
 #gene_alts <- c("ATRX", "DAXX", "SLX4", "MUS81", "PML", "RAD51", "ASF1B", "CHEK1", "FANCM", "FANCD2", "BLM", "SMARCA5", "CHD4", "BRCA2", "TOP3A")
 #gene_tas <- c("TERT", "DKC1", "GAR1", "MYC")
 
+## our signature.
 gene_combined <-c("GASK1B", "SYCP2", "H2BC11", "MAB21L2", "CLSTN3", "ELOVL4", "MAP9", "COL24A1", "PGM2L1", "STK32A", "CRYAB", "ARMH4", "LFNG", "SYTL5", "CCL28",
                 "TERT", "CCDC8", "ALDH1A3", "ERICH1", "TDRP", "SHFL", "DNPH1", "IRX2")
 
