@@ -2,7 +2,7 @@ library(tidyverse)
 library(dplyr)
 library(GenomicRanges)
 library(readr)
-# source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+# source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R") # for half-violin, half boxplot.
 
 # For certain likely high-ploidy samples, PureCN does not produce predictions without manual curation, so these samples are omitted in absolute copy number dataset (only 10 out of 16 samples present) even though we have WGS/WES data for them. 
 # we will thus work with relative copy number segment data for this (from GATK).
